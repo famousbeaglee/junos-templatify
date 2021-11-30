@@ -30,7 +30,8 @@ optional arguments:
 
 ## Running the utility
 ```
-% python3 junos-templatify.py -a 10.10.10.10 -u 'username' -w 'password' -p port_num --mode-templatify -l 'protocols/bgp/group' 'configuration/interfaces'         Templatify target to PATHLIST ['protocols/bgp/group', 'configuration/interfaces']       
+% python3 junos-templatify.py -a 10.10.10.10 -u 'username' -w 'password' -p port_num --mode-templatify -l 'protocols/bgp/group' 'configuration/interfaces'         
+Templatify target to PATHLIST ['protocols/bgp/group', 'configuration/interfaces']       
 Connecting device..
 Getting configuration..
 Parsing configuration..
