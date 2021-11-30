@@ -45,14 +45,6 @@ yaml file written into param.yaml
 ### template.jinja2
 ```
 interfaces {
-    ge-0/0/0 {
-        unit {{ data["interfaces/interface/<ge-0/0/0>/unit/<0>:name"] }} {
-            family inet {
-                address {{ data["interfaces/interface/<ge-0/0/0>/unit/<0>/family/inet/address/<10.100.12.1/24>:name"] }};
-            }
-            family iso;
-        }
-    }
     {{ data["interfaces/interface/<ge-0/0/1>:name"] }} {
         unit {{ data["interfaces/interface/<ge-0/0/1>/unit/<0>:name"] }} {
             family inet {
@@ -68,52 +60,11 @@ interfaces {
             }
         }
     }
-    {{ data["interfaces/interface/<ge-0/0/3>:name"] }} {
-        unit {{ data["interfaces/interface/<ge-0/0/3>/unit/<0>:name"] }} {
-            family inet {
-                address {{ data["interfaces/interface/<ge-0/0/3>/unit/<0>/family/inet/address/<10.100.111.1/24>:name"] }};
-            }
-            family iso;
-        }
-    }
-    {{ data["interfaces/interface/<ge-0/0/4>:name"] }} {
-        unit {{ data["interfaces/interface/<ge-0/0/4>/unit/<0>:name"] }} {
-            family inet {
-                address {{ data["interfaces/interface/<ge-0/0/4>/unit/<0>/family/inet/address/<10.100.112.1/24>:name"] }};
-            }
-            family iso;
-        }
-    }
-    {{ data["interfaces/interface/<fxp0>:name"] }} {
-        unit {{ data["interfaces/interface/<fxp0>/unit/<0>:name"] }} {
-            family inet {
-                address {{ data["interfaces/interface/<fxp0>/unit/<0>/family/inet/address/<100.123.1.0/16>:name"] }};
-            }
-        }
-    }
-    {{ data["interfaces/interface/<lo0>:name"] }} {
-        unit {{ data["interfaces/interface/<lo0>/unit/<0>:name"] }} {
-            family inet {
-                address {{ data["interfaces/interface/<lo0>/unit/<0>/family/inet/address/<10.100.100.1/32>:name"] }};
-            }
-            family iso {
-                address {{ data["interfaces/interface/<lo0>/unit/<0>/family/iso/address/<49.0001.1010.0100.0001.00>:name"] }};
-            }
-        }
-    }
-}
-
-...
+    
+....
 
 protocols {
-    isis {
-        level 1 disable;
-        interface {{ data["interfaces/interface/<ge-0/0/0>:name"] }}.0;
-        interface ge-0/0/1.0;
-        interface ge-0/0/3.0;
-        interface ge-0/0/4.0;
-        interface lo0.0;
-    }
+....
     bgp {
         group {{ data["protocols/bgp/group/<EBGP-to-vMX4>:name"] }} {
             type {{ data["protocols/bgp/group/<EBGP-to-vMX4>:type"] }};
