@@ -42,6 +42,10 @@ def generate_regix(path_list, key, value):
     leaf = path_list[-1]
     if re.match(r'<|>', leaf) and value==re.sub(r'<|>', '', leaf) :
         path_list.pop()
+    
+    if value == '': #If leaf value is '' then key is value
+        path_list.pop()
+        value = key
 
     #For meta word to escape
     value = re.escape(value)
@@ -54,6 +58,7 @@ def generate_regix(path_list, key, value):
     #Generate regex pattern in accordance to path and searching value
     #Ex. (?:protocols {.+?bgp.+?group.+?(?:IDC_BB).+?neighbor.+?\b(VALUE)(?:;|\b))
     for idx, val in enumerate(path_list):
+        val = re.escape(val)
         if idx==0 and len(path_list) > 1:
             pattern = r'(?:' + val + r' {.+?'
         elif idx==0 and len(path_list) == 1:
@@ -83,7 +88,6 @@ def reculsive_dict_callback(**kwargs):
                         nested_path = '{}/{}/<{}>'.format(path, k, i['name'])
                     else:
                         nested_path = '{}/{}'.format(path, k)
-                    #print(nested_path)
                     reculsive_dict_callback(obj=i, path=nested_path, callback=callback)
                 else: 
                     callback(value=i, key=k, path=path)
@@ -92,7 +96,6 @@ def reculsive_dict_callback(**kwargs):
                 nested_path = '{}/{}/<{}>'.format(path, k, v['name'])
             else:
                 nested_path = '{}/{}'.format(path, k)
-            #print(nested_path)
             reculsive_dict_callback(obj=v, path=nested_path, callback=callback)
         else:
             callback(value=v, key=k, path=path)
@@ -106,8 +109,7 @@ def test_callback(**kwargs):
     value = kwargs.get('value')
     key = kwargs.get('key')
 
-      
-    if 'value' in kwargs and 'path' in kwargs and value != '':
+    if 'value' in kwargs and 'path' in kwargs:
         config_path = path.replace('/configuration/', '')
 
         identifiers = re.findall('<.+?>', config_path)
@@ -123,11 +125,15 @@ def test_callback(**kwargs):
             if r is not None:
                 path_list[idx] = identifiers[int(r.group(1))]
         #print(path_list)
-
-        variable_template['{}:{}'.format(config_path, key)] = value
+     
+        if value == '': #If leaf value is '' then key is value
+            variable_template['{}:{}'.format(config_path, key)] = key
+        else:
+            variable_template['{}:{}'.format(config_path, key)] = value
 
         pattern = generate_regix(path_list, key, value)
         
+        #print(pattern)
         if pattern is None: 
             return
 
@@ -222,6 +228,7 @@ def generate_template(host, port, user, passwd, pathlist, templatefile, paramfil
                
         yaml_data = yaml.dump(yaml_dict, sort_keys=False)
         yaml_load_dict = yaml.load(yaml_data, Loader=yaml.FullLoader)
+        print(yaml_data)
        
         global result_text
         global count
