@@ -32,7 +32,7 @@ def convert_pure_dict(xml, *args, **kwargs):
 def generate_regix(path_list, key, value):
 
     #In case of hard to handle regex. To be develped
-    if re.match('(?<=[a-zA-Z])\\-(?=[a-zA-Z])', value) or value == '::/0':
+    if re.match('(?<=[a-zA-Z])\\-(?=[a-zA-Z])', value) or value == '::/0' or key == 'description':
         return None
 
     pattern = ''
@@ -44,7 +44,6 @@ def generate_regix(path_list, key, value):
         path_list.pop()
     
     if value == '': #If leaf value is '' then key is value
-        path_list.pop()
         value = key
 
     #For meta word to escape
@@ -79,6 +78,7 @@ def reculsive_dict_callback(**kwargs):
     obj = kwargs.get('obj')
     path = kwargs.get('path')
     callback = kwargs.get('callback')
+    text_path = kwargs.get('text_path')
 
     for k, v in obj.items():
         if isinstance(v, list):
@@ -88,26 +88,26 @@ def reculsive_dict_callback(**kwargs):
                         nested_path = '{}/{}/<{}>'.format(path, k, i['name'])
                     else:
                         nested_path = '{}/{}'.format(path, k)
-                    reculsive_dict_callback(obj=i, path=nested_path, callback=callback)
+                    reculsive_dict_callback(obj=i, path=nested_path, callback=callback, text_path=text_path)
                 else: 
-                    callback(value=i, key=k, path=path)
+                    callback(value=i, key=k, path=path, text_path=text_path)
         elif isinstance(v, dict):
             if 'name' in v:
                 nested_path = '{}/{}/<{}>'.format(path, k, v['name'])
             else:
                 nested_path = '{}/{}'.format(path, k)
-            reculsive_dict_callback(obj=v, path=nested_path, callback=callback)
+            reculsive_dict_callback(obj=v, path=nested_path, callback=callback, text_path=text_path)
         else:
-            callback(value=v, key=k, path=path)
+            callback(value=v, key=k, path=path, text_path=text_path)
 
 def test_callback(**kwargs):
-    global result_text
-    global count
     global variable_template
+    global text_config_dict
 
     path = kwargs.get('path')
     value = kwargs.get('value')
     key = kwargs.get('key')
+    text_path = kwargs.get('text_path')
 
     if 'value' in kwargs and 'path' in kwargs:
         config_path = path.replace('/configuration/', '')
@@ -115,38 +115,38 @@ def test_callback(**kwargs):
         identifiers = re.findall('<.+?>', config_path)
         for idx, val in enumerate(identifiers):
             config_path = config_path.replace(val, '[{}]'.format(idx))
-        #print(config_path)
+
         path_list = re.split('/', config_path)
         for idx, val in enumerate(identifiers):
             config_path = config_path.replace('[{}]'.format(idx), val)
-        #print(config_path)
+
         for idx, val in enumerate(path_list):
             r = re.match('\[(\d+)\]', val)
             if r is not None:
                 path_list[idx] = identifiers[int(r.group(1))]
-        #print(path_list)
      
-        if value == '': #If leaf value is '' then key is value
-            variable_template['{}:{}'.format(config_path, key)] = key
-        else:
-            variable_template['{}:{}'.format(config_path, key)] = value
-
         pattern = generate_regix(path_list, key, value)
-        
         #print(pattern)
         if pattern is None: 
             return
 
         p = re.compile(pattern, flags=re.S)
 
-        if p.search(result_text):
-            span = p.search(result_text).span(1)
+        if p.search(text_config_dict[text_path]):
+            if value == '': #If leaf value is '' then key is value
+                variable_template['{}:{}'.format(config_path, key)] = key
+            else:
+                variable_template['{}:{}'.format(config_path, key)] = value
+            span = p.search(text_config_dict[text_path]).span(1)
+            
+            #In case of exceptional search within {{ }}
+            before_word = text_config_dict[text_path][span[0]-1]
+            if before_word != ' ':
+                return
 
-            repl_wold = r'{{ ' r'data["' + '{}:{}'.format(config_path, key) + r'"]' + r' }}'
-
-            repl_text = result_text[:span[0]] + repl_wold + result_text[span[1]:]
-            result_text = repl_text
-            count += 1
+            repl_word = r'{{ ' r'data["' + '{}:{}'.format(config_path, key) + r'"]' + r' }}'
+            repl_text = text_config_dict[text_path][:span[0]] + repl_word + text_config_dict[text_path][span[1]:]
+            text_config_dict[text_path]= repl_text
         else:
             return
         
@@ -166,9 +166,11 @@ def config_by_template(host, port, user, passwd, template_file, param_file):
         with Device(host=host, port=port, user=user, password=passwd) as dev:
             with Config(dev) as conf:
                 with open(param_file) as var_file:
+                    print('rendering config..')
                     data = yaml.load(var_file, Loader=yaml.FullLoader)
                     rendered_conf= render(template_file, data)
-
+                    print(rendered_conf)
+                
                 conf.load(rendered_conf, format="text", merge=True)
                 diff = conf.diff()
 
@@ -197,6 +199,11 @@ def generate_template(host, port, user, passwd, pathlist, templatefile, paramfil
     #Created by flexible pathlist from user defined
     #['configuration/interfaces/interface', 'policy-options/policy-statement', 'configuration/protocols/ospf3', 'protocols/bgp/group']
 
+    global text_config_dict
+    global variable_template
+    variable_template = {}
+    text_config_dict = {}
+
     template_file = templatefile or 'template.jinja2'
     param_file = paramfile or 'param.yaml'
 
@@ -205,49 +212,48 @@ def generate_template(host, port, user, passwd, pathlist, templatefile, paramfil
     print('Connecting device..')
     with Device(host=host, port=port, user=user, password=passwd) as dev:
         print('Getting configuration..')
+
+        #Get xml configuration
         xml_data = dev.rpc.get_config()
         xml = etree.tostring(xml_data, encoding='unicode')
         result = jxmlease.parse(xml)
 
-        text_data = dev.rpc.get_config(options={'format':'text'})
-        text_config = etree.tostring(text_data, encoding='unicode')
-        text_config = re.sub('<configuration-text>|</configuration-text>', '', text_config)
-
-
-        myparser = jxmlease.parse(xml, generator=pathlist)
-        #'configuration/interfaces/interface', 'policy-options/policy-statement', 'configuration/protocols/ospf3', 'protocols/bgp/group'
+        #Get each text configuration by path
+        for path in pathlist:
+            path_config = dev.rpc.get_config(filter_xml=path.replace('/configuration/', ''), options={'format':'text'})
+            path_config = etree.tostring(path_config, encoding='unicode')
+            path_config = re.sub('<configuration-text>|</configuration-text>|## Last changed: .*', '', path_config)
+            text_config_dict[path] = path_config
 
         print('Parsing configuration..')
+        myparser = jxmlease.parse(xml, generator=pathlist)  #EX.) 'configuration/interfaces/interface', 'policy-options/policy-statement', 'configuration/protocols/ospf3', 'protocols/bgp/group'
+        
         yaml_dict = {}
         for (path, match, value) in myparser:
+            #Parse each xml convert to dict then dump yaml
             pure_dict = convert_pure_dict(value)
             if 'name' in pure_dict:
                 yaml_dict['{}/<{}>'.format(path, pure_dict['name'])] = pure_dict
             else:
                 yaml_dict[path] = pure_dict
-               
+
         yaml_data = yaml.dump(yaml_dict, sort_keys=False)
         yaml_load_dict = yaml.load(yaml_data, Loader=yaml.FullLoader)
-        print(yaml_data)
-       
-        global result_text
-        global count
-        global variable_template
-        count = 0
-        result_text = text_config
-        variable_template = {}
- 
+        #print(yaml_data)
+
         print('Generating template..')
-        for k, v in yaml_load_dict.items():
-            reculsive_dict_callback(obj=v, path=k, callback=test_callback)
-        
+        for text_path in pathlist: 
+            for k, v in yaml_load_dict.items():
+                reculsive_dict_callback(obj=v, path=k, callback=test_callback, text_path=text_path)
+
         yaml_variable_template = yaml.dump(variable_template, sort_keys=False)
+        jinja2_text_result = ''.join(text_config_dict.values())
 
         #with open(r'original_xml.yaml', 'w') as file:
         #    yaml.dump(yaml_dict, file, sort_keys=False)
 
         with open(template_file, 'w') as file:
-            file.write(result_text)
+            file.write(jinja2_text_result)
             print('jinja2 template written into {}'.format(template_file))
 
         with open(param_file, 'w') as file:
